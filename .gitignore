@@ -10,4 +10,3 @@ dist/
 coverage.xml
 .pytest_cache/
 .ruff_cache/
-uv.lock
