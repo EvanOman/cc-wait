@@ -4,7 +4,7 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-HOOK_PATH="$SCRIPT_DIR/wait_for_limits.py"
+HOOK_PATH="$SCRIPT_DIR/src/cc_wait/hook.py"
 SETTINGS_FILE="$HOME/.claude/settings.json"
 
 echo "Installing cc-wait hook..."
@@ -39,7 +39,7 @@ already_installed = False
 
 for matcher in settings['hooks']['Stop']:
     for hook in matcher.get('hooks', []):
-        if hook.get('command', '').endswith('wait_for_limits.py"'):
+        if 'cc_wait' in hook.get('command', '') or 'cc-wait' in hook.get('command', ''):
             # Update existing hook
             hook['command'] = hook_command
             hook['timeout'] = 21600

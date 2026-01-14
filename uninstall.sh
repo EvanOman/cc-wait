@@ -29,7 +29,7 @@ original_count = len(settings['hooks']['Stop'])
 settings['hooks']['Stop'] = [
     matcher for matcher in settings['hooks']['Stop']
     if not any(
-        'wait_for_limits.py' in hook.get('command', '')
+        'cc_wait' in hook.get('command', '') or 'cc-wait' in hook.get('command', '')
         for hook in matcher.get('hooks', [])
     )
 ]

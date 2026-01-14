@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Claude Code Stop hook that waits until rate limits reset and then continues.
 
@@ -9,24 +8,27 @@ When Claude hits rate limits, this hook:
 4. Returns a signal to continue the conversation
 """
 
+from __future__ import annotations
+
 import json
 import os
+import re
 import sys
 import time
-import re
+from datetime import datetime, timedelta, tzinfo
 from pathlib import Path
-from datetime import datetime, timedelta
+from typing import Any
 from zoneinfo import ZoneInfo
 
-DEBUG = os.environ.get('CC_WAIT_DEBUG', '').lower() in ('1', 'true', 'yes')
-DEBUG_LOG = Path.home() / '.claude' / 'wait_hook_debug.log'
+DEBUG = os.environ.get("CC_WAIT_DEBUG", "").lower() in ("1", "true", "yes")
+DEBUG_LOG = Path.home() / ".claude" / "wait_hook_debug.log"
 
 
-def log_debug(msg: str):
+def log_debug(msg: str) -> None:
     """Log debug message to file if DEBUG is enabled."""
     if DEBUG:
         timestamp = datetime.now().isoformat()
-        with open(DEBUG_LOG, 'a') as f:
+        with open(DEBUG_LOG, "a") as f:
             f.write(f"[{timestamp}] {msg}\n")
 
 
@@ -46,9 +48,9 @@ def parse_reset_time(text: str) -> datetime | None:
     # Matches: "7pm", "7:30pm", "14:00", "2:30 pm"
     patterns = [
         # "reset at 7pm (Asia/Tokyo)" or "reset at 7:30pm (America/New_York)"
-        r'reset\s+at\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:\(([^)]+)\))?',
+        r"reset\s+at\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:\(([^)]+)\))?",
         # "resets at 14:00"
-        r'resets?\s+at\s+(\d{1,2}):(\d{2})',
+        r"resets?\s+at\s+(\d{1,2}):(\d{2})",
     ]
 
     for pattern in patterns:
@@ -63,13 +65,13 @@ def parse_reset_time(text: str) -> datetime | None:
             # Handle am/pm if present
             if len(groups) > 2 and groups[2]:
                 ampm = groups[2]
-                if ampm == 'pm' and hour != 12:
+                if ampm == "pm" and hour != 12:
                     hour += 12
-                elif ampm == 'am' and hour == 12:
+                elif ampm == "am" and hour == 12:
                     hour = 0
 
             # Get timezone if specified
-            tz = None
+            tz: tzinfo | None = None
             if len(groups) > 3 and groups[3]:
                 try:
                     tz = ZoneInfo(groups[3])
@@ -96,9 +98,9 @@ def parse_reset_time(text: str) -> datetime | None:
 def extract_wait_seconds(text: str) -> int | None:
     """Fallback: extract wait time in seconds from text like 'try again in 30 seconds'."""
     patterns = [
-        r'(\d+)\s*(second|minute|hour|sec|min|hr)',
+        r"(\d+)\s*(second|minute|hour|sec|min|hr)",
         r'retry[_-]?after["\s:]+(\d+)',
-        r'in\s+(\d+):(\d+)',  # "in 5:30" format
+        r"in\s+(\d+):(\d+)",  # "in 5:30" format
     ]
 
     for pattern in patterns:
@@ -109,9 +111,9 @@ def extract_wait_seconds(text: str) -> int | None:
                 # Pattern like "30 seconds"
                 amount = int(groups[0])
                 unit = groups[1]
-                if 'min' in unit:
+                if "min" in unit:
                     amount *= 60
-                elif 'hour' in unit or 'hr' in unit:
+                elif "hour" in unit or "hr" in unit:
                     amount *= 3600
                 return amount
             elif len(groups) == 2 and groups[1] and groups[1].isdigit():
@@ -123,14 +125,14 @@ def extract_wait_seconds(text: str) -> int | None:
     return None
 
 
-def read_transcript_tail(transcript_path: str, lines: int = 100) -> list[dict]:
+def read_transcript_tail(transcript_path: str, lines: int = 100) -> list[dict[str, Any]]:
     """Read the last N lines of the transcript JSONL file."""
     path = Path(transcript_path)
     if not path.exists():
         return []
 
-    entries = []
-    with open(path, 'r') as f:
+    entries: list[dict[str, Any]] = []
+    with open(path) as f:
         all_lines = f.readlines()
         for line in all_lines[-lines:]:
             line = line.strip()
@@ -142,7 +144,9 @@ def read_transcript_tail(transcript_path: str, lines: int = 100) -> list[dict]:
     return entries
 
 
-def find_rate_limit_info(hook_input: dict, transcript_entries: list[dict]) -> dict | None:
+def find_rate_limit_info(
+    hook_input: dict[str, Any], transcript_entries: list[dict[str, Any]]
+) -> dict[str, Any] | None:
     """
     Search for rate limit information in hook input and transcript.
     Returns dict with either 'reset_time' (datetime) or 'wait_seconds' (int).
@@ -156,9 +160,14 @@ def find_rate_limit_info(hook_input: dict, transcript_entries: list[dict]) -> di
 
     # Check for rate limit indicators
     rate_limit_indicators = [
-        'usage limit', 'rate limit', 'limit reached',
-        'rate_limit', 'ratelimit', '429',
-        'too many requests', 'try again'
+        "usage limit",
+        "rate limit",
+        "limit reached",
+        "rate_limit",
+        "ratelimit",
+        "429",
+        "too many requests",
+        "try again",
     ]
 
     if not any(ind in all_text_lower for ind in rate_limit_indicators):
@@ -170,15 +179,15 @@ def find_rate_limit_info(hook_input: dict, transcript_entries: list[dict]) -> di
     # Try to parse reset time first (preferred)
     reset_time = parse_reset_time(all_text)
     if reset_time:
-        return {'reset_time': reset_time}
+        return {"reset_time": reset_time}
 
     # Fallback to wait seconds
     wait_seconds = extract_wait_seconds(all_text)
     if wait_seconds:
-        return {'wait_seconds': wait_seconds}
+        return {"wait_seconds": wait_seconds}
 
     # Default wait if rate limit detected but no time found
-    return {'wait_seconds': 300}  # 5 minute default
+    return {"wait_seconds": 300}  # 5 minute default
 
 
 def format_duration(seconds: int) -> str:
@@ -195,7 +204,8 @@ def format_duration(seconds: int) -> str:
         return f"{hours}h {mins}m" if mins else f"{hours}h"
 
 
-def main():
+def main() -> int:
+    """Main entry point for the hook."""
     log_debug("=" * 60)
     log_debug("Hook invoked")
 
@@ -203,15 +213,15 @@ def main():
     try:
         raw_input = sys.stdin.read()
         log_debug(f"Raw stdin length: {len(raw_input)}")
-        hook_input = json.loads(raw_input) if raw_input.strip() else {}
+        hook_input: dict[str, Any] = json.loads(raw_input) if raw_input.strip() else {}
     except json.JSONDecodeError as e:
         log_debug(f"JSON decode error: {e}")
         print(json.dumps({"decision": "allow"}))
         return 0
 
     # Read transcript
-    transcript_path = hook_input.get('transcript_path', '')
-    entries = []
+    transcript_path = hook_input.get("transcript_path", "")
+    entries: list[dict[str, Any]] = []
     if transcript_path:
         entries = read_transcript_tail(transcript_path)
         log_debug(f"Read {len(entries)} transcript entries")
@@ -225,15 +235,15 @@ def main():
         return 0
 
     # Calculate wait time
-    if 'reset_time' in rate_limit_info:
-        reset_time = rate_limit_info['reset_time']
+    reset_str: str | None = None
+    if "reset_time" in rate_limit_info:
+        reset_time = rate_limit_info["reset_time"]
         now = datetime.now(reset_time.tzinfo)
         wait_seconds = int((reset_time - now).total_seconds())
-        reset_str = reset_time.strftime('%H:%M %Z')
+        reset_str = reset_time.strftime("%H:%M %Z")
         log_debug(f"Reset time: {reset_time}, wait: {wait_seconds}s")
     else:
-        wait_seconds = rate_limit_info['wait_seconds']
-        reset_str = None
+        wait_seconds = rate_limit_info["wait_seconds"]
         log_debug(f"Wait seconds: {wait_seconds}")
 
     # Sanity check wait time
@@ -251,7 +261,9 @@ def main():
     # Display wait info
     duration_str = format_duration(wait_seconds)
     if reset_str:
-        print(f"⏳ Rate limit reached. Waiting until {reset_str} ({duration_str})...", file=sys.stderr)
+        print(
+            f"⏳ Rate limit reached. Waiting until {reset_str} ({duration_str})...", file=sys.stderr
+        )
     else:
         print(f"⏳ Rate limit reached. Waiting {duration_str}...", file=sys.stderr)
 
@@ -274,7 +286,7 @@ def main():
         if remaining > 60:
             print(f"⏳ {format_duration(int(remaining))} remaining...", file=sys.stderr)
 
-    print(f"✓ Rate limit reset. Continuing...", file=sys.stderr)
+    print("✓ Rate limit reset. Continuing...", file=sys.stderr)
 
     # Block stopping and tell Claude to continue
     output = {"decision": "block", "reason": "continue"}
@@ -283,5 +295,5 @@ def main():
     return 0
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

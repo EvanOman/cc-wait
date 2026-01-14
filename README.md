@@ -1,3 +1,6 @@
+[![CI](https://github.com/EvanOman/cc-wait/actions/workflows/ci.yml/badge.svg)](https://github.com/EvanOman/cc-wait/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/EvanOman/cc-wait/branch/main/graph/badge.svg)](https://codecov.io/gh/EvanOman/cc-wait)
+
 # cc-wait
 
 A Claude Code hook that automatically waits for rate limits to reset, then continues your session.
@@ -22,6 +25,7 @@ When you hit Claude Code's usage limits, instead of stopping, this hook:
 ```bash
 # Clone the repo
 git clone https://github.com/EvanOman/cc-wait.git
+cd cc-wait
 
 # Run the install script
 ./install.sh
@@ -37,7 +41,7 @@ Or manually add to `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "python3 /path/to/cc-wait/wait_for_limits.py",
+            "command": "python3 /path/to/cc-wait/src/cc_wait/hook.py",
             "timeout": 21600
           }
         ]
@@ -65,12 +69,19 @@ This is a **Stop hook** - it runs every time Claude finishes responding. The hoo
 export CC_WAIT_DEBUG=1
 ```
 
-**Timeout:** The default timeout is 6 hours (21600s) to handle maximum wait times. Adjust in settings if needed.
+**Timeout:** The default timeout is 6 hours (21600s) to handle maximum wait times.
 
-## Testing
+## Development
 
 ```bash
-python3 test_hook.py
+# Install dependencies
+just install
+
+# Run all checks (format, lint, type, test)
+just fc
+
+# Run tests only
+just test
 ```
 
 ## Uninstall

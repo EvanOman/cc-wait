@@ -3,3 +3,11 @@ __pycache__/
 *.pyo
 .env
 *.log
+.venv/
+dist/
+*.egg-info/
+.coverage
+coverage.xml
+.pytest_cache/
+.ruff_cache/
+uv.lock
