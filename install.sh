@@ -4,10 +4,16 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-HOOK_PATH="$SCRIPT_DIR/src/cc_wait/hook.py"
 SETTINGS_FILE="$HOME/.claude/settings.json"
 
+# Hook command uses uv run to ensure dependencies are available
+HOOK_COMMAND="cd $SCRIPT_DIR && uv run python -m cc_wait"
+
 echo "Installing cc-wait hook..."
+
+# Ensure dependencies are installed
+echo "Installing dependencies..."
+(cd "$SCRIPT_DIR" && uv sync --dev)
 
 # Ensure .claude directory exists
 mkdir -p "$HOME/.claude"
@@ -21,7 +27,7 @@ if [ -f "$SETTINGS_FILE" ]; then
 import json
 
 settings_file = "$SETTINGS_FILE"
-hook_path = "$HOOK_PATH"
+hook_command = "$HOOK_COMMAND"
 
 with open(settings_file, 'r') as f:
     settings = json.load(f)
@@ -34,7 +40,6 @@ if 'Stop' not in settings['hooks']:
     settings['hooks']['Stop'] = []
 
 # Check if our hook is already installed
-hook_command = f'python3 "{hook_path}"'
 already_installed = False
 
 for matcher in settings['hooks']['Stop']:
@@ -73,7 +78,7 @@ EOF
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$HOOK_PATH\"",
+            "command": "$HOOK_COMMAND",
             "timeout": 21600
           }
         ]
@@ -94,7 +99,7 @@ else
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$HOOK_PATH\"",
+            "command": "$HOOK_COMMAND",
             "timeout": 21600
           }
         ]
