@@ -91,7 +91,7 @@ class TestHookIntegration:
         )
         assert result.returncode == 0
         output = json.loads(result.stdout)
-        assert output["decision"] == "allow"
+        assert output["decision"] == "approve"
 
     def test_allows_normal_stop(self) -> None:
         result = subprocess.run(
@@ -103,7 +103,7 @@ class TestHookIntegration:
         )
         assert result.returncode == 0
         output = json.loads(result.stdout)
-        assert output["decision"] == "allow"
+        assert output["decision"] == "approve"
 
     def test_detects_rate_limit_and_waits(self) -> None:
         """Test that the hook detects rate limits and starts waiting (will timeout)."""

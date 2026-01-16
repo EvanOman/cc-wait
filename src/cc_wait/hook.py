@@ -216,7 +216,7 @@ def main() -> int:
         hook_input: dict[str, Any] = json.loads(raw_input) if raw_input.strip() else {}
     except json.JSONDecodeError as e:
         log_debug(f"JSON decode error: {e}")
-        print(json.dumps({"decision": "allow"}))
+        print(json.dumps({"decision": "approve"}))
         return 0
 
     # Read transcript
@@ -231,7 +231,7 @@ def main() -> int:
 
     if not rate_limit_info:
         log_debug("No rate limit detected, allowing stop")
-        print(json.dumps({"decision": "allow"}))
+        print(json.dumps({"decision": "approve"}))
         return 0
 
     # Calculate wait time
@@ -249,7 +249,7 @@ def main() -> int:
     # Sanity check wait time
     if wait_seconds <= 0:
         log_debug("Wait time <= 0, allowing stop")
-        print(json.dumps({"decision": "allow"}))
+        print(json.dumps({"decision": "approve"}))
         return 0
 
     # Cap at 6 hours (rate limits reset every 5 hours max)
