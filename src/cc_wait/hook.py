@@ -20,6 +20,8 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from cc_wait.schema import create_approve_output, create_block_output
+
 DEBUG = os.environ.get("CC_WAIT_DEBUG", "").lower() in ("1", "true", "yes")
 DEBUG_LOG = Path.home() / ".claude" / "wait_hook_debug.log"
 
@@ -216,7 +218,7 @@ def main() -> int:
         hook_input: dict[str, Any] = json.loads(raw_input) if raw_input.strip() else {}
     except json.JSONDecodeError as e:
         log_debug(f"JSON decode error: {e}")
-        print(json.dumps({"decision": "approve"}))
+        print(json.dumps(create_approve_output()))
         return 0
 
     # Read transcript
@@ -231,7 +233,7 @@ def main() -> int:
 
     if not rate_limit_info:
         log_debug("No rate limit detected, allowing stop")
-        print(json.dumps({"decision": "approve"}))
+        print(json.dumps(create_approve_output()))
         return 0
 
     # Calculate wait time
@@ -249,7 +251,7 @@ def main() -> int:
     # Sanity check wait time
     if wait_seconds <= 0:
         log_debug("Wait time <= 0, allowing stop")
-        print(json.dumps({"decision": "approve"}))
+        print(json.dumps(create_approve_output()))
         return 0
 
     # Cap at 6 hours (rate limits reset every 5 hours max)
@@ -289,7 +291,7 @@ def main() -> int:
     print("✓ Rate limit reset. Continuing...", file=sys.stderr)
 
     # Block stopping and tell Claude to continue
-    output = {"decision": "block", "reason": "continue"}
+    output = create_block_output("continue")
     log_debug(f"Returning: {output}")
     print(json.dumps(output))
     return 0
