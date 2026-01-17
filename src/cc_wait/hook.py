@@ -72,13 +72,25 @@ def parse_reset_time(text: str) -> datetime | None:
                 elif ampm == "am" and hour == 12:
                     hour = 0
 
-            # Get timezone if specified
+            # Get timezone if specified - handle case-insensitivity
             tz: tzinfo | None = None
             if len(groups) > 3 and groups[3]:
-                try:
-                    tz = ZoneInfo(groups[3])
-                except Exception:
-                    log_debug(f"Could not parse timezone: {groups[3]}")
+                tz_str = groups[3]
+                # Try common case variations (ZoneInfo is case-sensitive)
+                tz_attempts = [
+                    tz_str,  # as-is
+                    tz_str.title().replace("_", "/").replace(" ", "_"),  # america/chicago -> America/Chicago
+                    "/".join(part.title() for part in tz_str.split("/")),  # america/new_york -> America/New_York
+                ]
+                for tz_attempt in tz_attempts:
+                    try:
+                        tz = ZoneInfo(tz_attempt)
+                        log_debug(f"Parsed timezone: {tz_attempt}")
+                        break
+                    except Exception:
+                        continue
+                if tz is None:
+                    log_debug(f"Could not parse timezone: {tz_str}")
 
             if tz is None:
                 tz = datetime.now().astimezone().tzinfo
@@ -146,6 +158,44 @@ def read_transcript_tail(transcript_path: str, lines: int = 100) -> list[dict[st
     return entries
 
 
+def check_api_errors(transcript_entries: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """
+    Check for API error entries in transcript that indicate rate limits.
+    Returns wait info if rate limit error found, None otherwise.
+    """
+    for entry in reversed(transcript_entries[-20:]):
+        if entry.get("type") != "system" or entry.get("subtype") != "api_error":
+            continue
+
+        error = entry.get("error", {})
+        status = error.get("status")
+        error_info = error.get("error", {}).get("error", {})
+        error_type = error_info.get("type", "")
+
+        log_debug(f"Found API error: status={status}, type={error_type}")
+
+        # 429 = Rate limit exceeded
+        if status == 429:
+            # Try to get retry-after from headers
+            headers = error.get("headers", {})
+            retry_after = headers.get("retry-after") or headers.get("Retry-After")
+            if retry_after:
+                try:
+                    return {"wait_seconds": int(retry_after)}
+                except ValueError:
+                    pass
+            return {"wait_seconds": 300}  # Default 5 minutes for rate limits
+
+        # 529 = Overloaded (might indicate approaching limits)
+        if status == 529 or error_type == "overloaded_error":
+            # Check if there's a retryInMs in the entry
+            retry_ms = entry.get("retryInMs")
+            if retry_ms:
+                return {"wait_seconds": max(60, int(retry_ms / 1000))}
+
+    return None
+
+
 def find_rate_limit_info(
     hook_input: dict[str, Any], transcript_entries: list[dict[str, Any]]
 ) -> dict[str, Any] | None:
@@ -153,6 +203,12 @@ def find_rate_limit_info(
     Search for rate limit information in hook input and transcript.
     Returns dict with either 'reset_time' (datetime) or 'wait_seconds' (int).
     """
+    # First check for API error entries (most reliable)
+    api_error_info = check_api_errors(transcript_entries)
+    if api_error_info:
+        log_debug(f"Found rate limit from API error: {api_error_info}")
+        return api_error_info
+
     # Combine all text to search
     all_text = json.dumps(hook_input)
     for entry in reversed(transcript_entries[-20:]):  # Check recent entries
@@ -167,7 +223,11 @@ def find_rate_limit_info(
         "limit reached",
         "rate_limit",
         "ratelimit",
+        "your limit",  # "Your limit will reset at..."
+        "limit will reset",
         "429",
+        "529",
+        "overloaded",
         "too many requests",
         "try again",
     ]
@@ -218,10 +278,10 @@ def main() -> int:
         log_debug(f"Raw stdin content: {raw_input[:2000]}")  # Log full input for debugging
         hook_input: dict[str, Any] = json.loads(raw_input) if raw_input.strip() else {}
         log_debug(f"Hook input keys: {list(hook_input.keys())}")
-        # Log any potentially interesting fields
-        for key in ["stop_reason", "error", "message", "notification", "status"]:
-            if key in hook_input:
-                log_debug(f"  {key}: {hook_input[key]}")
+        # Log ALL fields for debugging
+        for key, value in hook_input.items():
+            if key != "transcript_path":  # Skip long path
+                log_debug(f"  {key}: {json.dumps(value)[:200]}")
     except json.JSONDecodeError as e:
         log_debug(f"JSON decode error: {e}")
         print(json.dumps(create_approve_output()))
@@ -233,13 +293,19 @@ def main() -> int:
 
     # Read transcript
     transcript_path = hook_input.get("transcript_path", "")
+    log_debug(f"Transcript path: {transcript_path}")
     entries: list[dict[str, Any]] = []
     if transcript_path:
         entries = read_transcript_tail(transcript_path)
         log_debug(f"Read {len(entries)} transcript entries")
-        # Log last few entries for debugging
-        for i, entry in enumerate(entries[-3:]):
-            log_debug(f"  Recent entry {i}: {json.dumps(entry)[:500]}")
+        # Log last few entries with their types for debugging
+        for i, entry in enumerate(entries[-5:]):
+            entry_type = entry.get("type", "unknown")
+            entry_subtype = entry.get("subtype", "")
+            log_debug(f"  Entry {i}: type={entry_type}, subtype={entry_subtype}")
+            # Log full entry if it's a system/error entry
+            if entry_type == "system" or entry.get("level") == "error":
+                log_debug(f"    Full: {json.dumps(entry)[:800]}")
 
     # Look for rate limit info
     rate_limit_info = find_rate_limit_info(hook_input, entries)
