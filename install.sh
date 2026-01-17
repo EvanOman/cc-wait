@@ -110,21 +110,23 @@ fi
 echo ""
 echo "cc-wait installed successfully!"
 echo ""
-echo "IMPORTANT: To detect consumer-level rate limits, you need to use the wrapper."
+echo "To detect consumer-level rate limits, use 'claude-wait' instead of 'claude'."
 echo ""
 echo "Add this to your ~/.bashrc or ~/.zshrc:"
 echo ""
-echo '  # cc-wait: Capture terminal output for rate limit detection'
-echo '  cc-claude-wrapper() {'
+echo '  # claude-wait: Run claude with rate limit detection'
+echo '  claude-wait() {'
 echo '    local claude_bin'
 echo '    claude_bin=$(command -v claude 2>/dev/null || echo "$HOME/.claude/local/claude")'
 echo '    mkdir -p "$HOME/.claude"'
 echo '    : > "$HOME/.claude/session_output.log"'
-echo '    script -q -e -c "$claude_bin $*" "$HOME/.claude/session_output.log"'
+echo '    script -q -e -c "\"$claude_bin\" $*" "$HOME/.claude/session_output.log"'
 echo '  }'
-echo '  alias claude=cc-claude-wrapper'
 echo ""
-echo "Then restart your shell or run: source ~/.bashrc"
+echo "Then: source ~/.bashrc"
 echo ""
-echo "Debug logging: export CC_WAIT_DEBUG=1"
-echo "Debug log location: ~/.claude/wait_hook_debug.log"
+echo "Usage:"
+echo "  claude        # Normal - no rate limit wait"
+echo "  claude-wait   # With rate limit detection + auto-wait"
+echo ""
+echo "Debug: export CC_WAIT_DEBUG=1"

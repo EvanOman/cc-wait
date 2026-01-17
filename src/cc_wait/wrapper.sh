@@ -1,15 +1,14 @@
 #!/bin/bash
-# Claude Code wrapper that captures terminal output for rate limit detection
+# claude-wait: Run Claude Code with rate limit detection
 #
 # Usage: Source this in your .bashrc/.zshrc:
 #   source /path/to/wrapper.sh
 #
-# Or install as an alias:
-#   alias claude='cc-claude-wrapper'
+# Then use `claude-wait` instead of `claude` when you want auto-wait on rate limits.
 
 CC_OUTPUT_FILE="${CC_OUTPUT_FILE:-$HOME/.claude/session_output.log}"
 
-cc-claude-wrapper() {
+claude-wait() {
     local real_claude
 
     # Find the real claude binary
@@ -30,11 +29,10 @@ cc-claude-wrapper() {
     # Clear previous output
     : > "$CC_OUTPUT_FILE"
 
-    # Run claude with output capture
-    # We use script to capture the full terminal output including escape sequences
-    # The -q flag makes it quiet, -e returns the exit status of the child
+    # Run claude with output capture using script
+    # -q = quiet, -e = return exit status of child
     if command -v script &>/dev/null; then
-        script -q -e -c "$real_claude $*" "$CC_OUTPUT_FILE"
+        script -q -e -c "\"$real_claude\" $*" "$CC_OUTPUT_FILE"
         return $?
     else
         # Fallback: just capture stderr (may miss some output)
@@ -44,5 +42,5 @@ cc-claude-wrapper() {
 }
 
 # Export for subshells
-export -f cc-claude-wrapper 2>/dev/null || true
+export -f claude-wait 2>/dev/null || true
 export CC_OUTPUT_FILE
