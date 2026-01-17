@@ -3,17 +3,13 @@
 
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SETTINGS_FILE="$HOME/.claude/settings.json"
 
-# Hook command uses uv run to ensure dependencies are available
-HOOK_COMMAND="cd $SCRIPT_DIR && uv run python -m cc_wait"
+# Hook command uses uvx for portability - works from any directory
+# CC_WAIT_DEBUG=1 enables logging to ~/.claude/wait_hook_debug.log
+HOOK_COMMAND="CC_WAIT_DEBUG=1 uvx --from git+https://github.com/EvanOman/cc-wait cc-wait-hook"
 
 echo "Installing cc-wait hook..."
-
-# Ensure dependencies are installed
-echo "Installing dependencies..."
-(cd "$SCRIPT_DIR" && uv sync --dev)
 
 # Ensure .claude directory exists
 mkdir -p "$HOME/.claude"

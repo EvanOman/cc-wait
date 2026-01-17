@@ -215,11 +215,21 @@ def main() -> int:
     try:
         raw_input = sys.stdin.read()
         log_debug(f"Raw stdin length: {len(raw_input)}")
+        log_debug(f"Raw stdin content: {raw_input[:2000]}")  # Log full input for debugging
         hook_input: dict[str, Any] = json.loads(raw_input) if raw_input.strip() else {}
+        log_debug(f"Hook input keys: {list(hook_input.keys())}")
+        # Log any potentially interesting fields
+        for key in ["stop_reason", "error", "message", "notification", "status"]:
+            if key in hook_input:
+                log_debug(f"  {key}: {hook_input[key]}")
     except json.JSONDecodeError as e:
         log_debug(f"JSON decode error: {e}")
         print(json.dumps(create_approve_output()))
         return 0
+
+    # Check if this is a continuation from a previous stop hook (avoid infinite loop)
+    if hook_input.get("stop_hook_active"):
+        log_debug("stop_hook_active is True - previous hook triggered continuation")
 
     # Read transcript
     transcript_path = hook_input.get("transcript_path", "")
@@ -227,6 +237,9 @@ def main() -> int:
     if transcript_path:
         entries = read_transcript_tail(transcript_path)
         log_debug(f"Read {len(entries)} transcript entries")
+        # Log last few entries for debugging
+        for i, entry in enumerate(entries[-3:]):
+            log_debug(f"  Recent entry {i}: {json.dumps(entry)[:500]}")
 
     # Look for rate limit info
     rate_limit_info = find_rate_limit_info(hook_input, entries)
