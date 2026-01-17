@@ -158,6 +158,52 @@ def read_transcript_tail(transcript_path: str, lines: int = 100) -> list[dict[st
     return entries
 
 
+def check_terminal_output() -> dict[str, Any] | None:
+    """
+    Check the captured terminal output file for rate limit messages.
+    This file is created by the cc-claude-wrapper script.
+    Returns wait info if rate limit found, None otherwise.
+    """
+    output_file = Path(os.environ.get("CC_OUTPUT_FILE", Path.home() / ".claude" / "session_output.log"))
+
+    if not output_file.exists():
+        log_debug(f"Terminal output file not found: {output_file}")
+        return None
+
+    try:
+        # Read the last portion of the file (rate limit message should be near the end)
+        content = output_file.read_text(errors="ignore")
+        # Take last 5000 chars to avoid reading huge files
+        content = content[-5000:] if len(content) > 5000 else content
+
+        log_debug(f"Checking terminal output ({len(content)} chars)")
+
+        # Look for the specific rate limit message pattern
+        # "Claude usage limit reached. Your limit will reset at 7pm (America/Chicago)."
+        if "usage limit" in content.lower() or "limit will reset" in content.lower():
+            log_debug("Found rate limit indicator in terminal output")
+            log_debug(f"Content sample: {content[-500:]}")
+
+            # Try to parse the reset time
+            reset_time = parse_reset_time(content)
+            if reset_time:
+                return {"reset_time": reset_time}
+
+            # Fallback: extract wait seconds if present
+            wait_seconds = extract_wait_seconds(content)
+            if wait_seconds:
+                return {"wait_seconds": wait_seconds}
+
+            # Default wait if we found rate limit indicator but couldn't parse time
+            log_debug("Rate limit found but couldn't parse reset time, using default wait")
+            return {"wait_seconds": 300}
+
+    except Exception as e:
+        log_debug(f"Error reading terminal output: {e}")
+
+    return None
+
+
 def check_api_errors(transcript_entries: list[dict[str, Any]]) -> dict[str, Any] | None:
     """
     Check for API error entries in transcript that indicate rate limits.
@@ -208,6 +254,12 @@ def find_rate_limit_info(
     if api_error_info:
         log_debug(f"Found rate limit from API error: {api_error_info}")
         return api_error_info
+
+    # Check captured terminal output (from cc-claude-wrapper)
+    terminal_info = check_terminal_output()
+    if terminal_info:
+        log_debug(f"Found rate limit from terminal output: {terminal_info}")
+        return terminal_info
 
     # Combine all text to search
     all_text = json.dumps(hook_input)

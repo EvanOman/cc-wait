@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from cc_wait.hook import extract_wait_seconds, format_duration, parse_reset_time
+from cc_wait.hook import check_terminal_output, extract_wait_seconds, format_duration, parse_reset_time
 
 HOOK_SCRIPT = Path(__file__).parent.parent / "src" / "cc_wait" / "hook.py"
 
@@ -115,3 +115,52 @@ class TestHookIntegration:
                 text=True,
                 timeout=2,  # Short timeout - should fail because hook is waiting
             )
+
+
+class TestTerminalOutputDetection:
+    """Tests for terminal output file detection."""
+
+    def test_returns_none_when_file_missing(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Should return None when output file doesn't exist."""
+        monkeypatch.setenv("CC_OUTPUT_FILE", str(tmp_path / "nonexistent.log"))
+        result = check_terminal_output()
+        assert result is None
+
+    def test_detects_rate_limit_in_output(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Should detect rate limit message in terminal output."""
+        output_file = tmp_path / "session_output.log"
+        output_file.write_text(
+            "Some output...\n"
+            "Claude usage limit reached. Your limit will reset at 7pm (America/Chicago).\n"
+            "More output..."
+        )
+        monkeypatch.setenv("CC_OUTPUT_FILE", str(output_file))
+
+        result = check_terminal_output()
+        assert result is not None
+        assert "reset_time" in result
+        assert result["reset_time"].hour == 19
+
+    def test_ignores_output_without_rate_limit(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Should return None when output has no rate limit message."""
+        output_file = tmp_path / "session_output.log"
+        output_file.write_text("Normal output without any rate limit messages")
+        monkeypatch.setenv("CC_OUTPUT_FILE", str(output_file))
+
+        result = check_terminal_output()
+        assert result is None
+
+    def test_handles_ansi_escape_codes(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Should detect rate limit even with ANSI escape codes."""
+        output_file = tmp_path / "session_output.log"
+        # Simulate terminal output with escape codes
+        output_file.write_text(
+            "\x1b[32m✓\x1b[0m Some task done\n"
+            "\x1b[31mClaude usage limit reached.\x1b[0m Your limit will reset at 3pm.\n"
+        )
+        monkeypatch.setenv("CC_OUTPUT_FILE", str(output_file))
+
+        result = check_terminal_output()
+        assert result is not None
+        assert "reset_time" in result
+        assert result["reset_time"].hour == 15
