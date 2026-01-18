@@ -1,13 +1,23 @@
 [project]
 name = "cc-wait"
-version = "0.1.0"
-description = "Claude Code hook that waits for rate limits to reset and continues automatically"
+version = "0.2.0"
+description = "Automatically continue Claude Code sessions after rate limits reset"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "httpx>=0.28.0",
+    "fastapi>=0.115.0",
+    "uvicorn>=0.34.0",
+    "python-fasthtml>=0.12.0",
+    "opentelemetry-api>=1.29.0",
+    "opentelemetry-sdk>=1.29.0",
+    "opentelemetry-exporter-otlp-proto-grpc>=1.29.0",
+    "opentelemetry-instrumentation-fastapi>=0.50b0",
+]
 
 [project.scripts]
-cc-wait-hook = "cc_wait.hook:main"
+cc-wait = "cc_wait.cli:main"
+cc-wait-server = "cc_wait.server:main"
 
 [build-system]
 requires = ["uv_build>=0.8.17,<0.9.0"]
@@ -15,7 +25,6 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
-    "jsonschema>=4.23.0",
     "pytest>=9.0.0",
     "pytest-cov>=6.0.0",
     "ruff>=0.14.0",

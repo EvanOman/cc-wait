@@ -1,0 +1,21 @@
+[Unit]
+Description=cc-wait Dashboard - Claude Code session monitoring
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/dev/cc-wait
+ExecStart=%h/dev/cc-wait/.venv/bin/python -m cc_wait.server --port 18800
+Restart=always
+RestartSec=10
+
+# Environment for OTel
+Environment=OTEL_ENABLED=true
+Environment=OTEL_EXPORTER_ENDPOINT=http://localhost:4317
+Environment=ROOT_PATH=/cc-wait
+
+# Access to tmux (use /tmp so tmux finds socket at /tmp/tmux-UID/default)
+Environment=TMUX_TMPDIR=/tmp
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,48 @@
+services:
+  cc-wait-dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cc-wait-dashboard
+
+    ports:
+      - "18800:8000"
+
+    environment:
+      - PORT=8000
+      - HOST=0.0.0.0
+      - ROOT_PATH=/cc-wait
+      # OpenTelemetry - export to host's Jaeger
+      - OTEL_ENABLED=true
+      - OTEL_EXPORTER_ENDPOINT=http://host.docker.internal:4317
+      # tmux socket location (mapped from host)
+      - TMUX_TMPDIR=/tmp/tmux-host
+
+    volumes:
+      # Claude credentials (read-only)
+      - ~/.claude:/root/.claude:ro
+      # tmux socket - allows container to communicate with host tmux
+      # Note: Replace 1000 with your UID if different
+      - /tmp/tmux-${UID:-1000}:/tmp/tmux-host:ro
+
+    # For Linux Docker: connect to host services
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    restart: unless-stopped
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 10s
+      retries: 3
+
+    # Send logs to journald for centralized logging
+    logging:
+      driver: journald
+      options:
+        tag: cc-wait-dashboard
+
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
