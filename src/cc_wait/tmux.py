@@ -107,42 +107,45 @@ def detect_rate_limit(content: str) -> dict | None:
     """
     content_lower = content.lower()
 
-    # Check for rate limit indicators
-    indicators = [
-        "usage limit",
-        "limit reached",
-        "limit will reset",
-    ]
+    # Look for the specific Claude rate limit message
+    # Pattern: "Claude usage limit reached" followed by reset time
+    full_pattern = (
+        r"claude\s+usage\s+limit\s+reached.*?"
+        r"limit\s+will\s+reset\s+at\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s*(?:\(([^)]+)\))?"
+    )
 
-    if not any(ind in content_lower for ind in indicators):
+    match = re.search(full_pattern, content_lower, re.DOTALL)
+    if not match:
         return None
 
-    # Try to parse reset time
-    # Pattern: "reset at Xpm" or "reset at X:XXpm" with optional timezone
-    pattern = r"reset\s+at\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:\(([^)]+)\))?"
+    # Reject matches that appear to be from code, tests, or diffs
+    # Look at context around the match for indicators
+    raw_match = match.group(0)
+    start = max(0, match.start() - 50)
+    context = content_lower[start : match.end()]
 
-    match = re.search(pattern, content_lower)
-    if match:
-        groups = match.groups()
-        hour = int(groups[0])
-        minute = int(groups[1]) if groups[1] else 0
-        ampm = groups[2]
-        timezone = groups[3] if len(groups) > 3 else None
+    # Code/diff indicators: quotes, assignment, diff markers
+    code_indicators = ['content = "', 'content="', '= "claude', ">>> ", "... ", "\n+"]
+    if any(ind in context for ind in code_indicators):
+        return None
 
-        if ampm == "pm" and hour != 12:
-            hour += 12
-        elif ampm == "am" and hour == 12:
-            hour = 0
+    groups = match.groups()
+    hour = int(groups[0])
+    minute = int(groups[1]) if groups[1] else 0
+    ampm = groups[2]
+    timezone = groups[3] if len(groups) > 3 else None
 
-        return {
-            "reset_hour": hour,
-            "reset_minute": minute,
-            "timezone": timezone,
-            "raw_match": match.group(0),
-        }
+    if ampm == "pm" and hour != 12:
+        hour += 12
+    elif ampm == "am" and hour == 12:
+        hour = 0
 
-    # Found indicator but couldn't parse time
-    return {"raw_match": None}
+    return {
+        "reset_hour": hour,
+        "reset_minute": minute,
+        "timezone": timezone,
+        "raw_match": raw_match,
+    }
 
 
 def find_rate_limited_panes() -> list[TmuxPane]:
