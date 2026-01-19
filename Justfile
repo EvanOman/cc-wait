@@ -28,3 +28,9 @@ ci: lint format-check type test
 
 install:
     uv sync --dev
+
+# Redeploy local changes to the running dashboard service
+redeploy:
+    rm -rf src/cc_wait/__pycache__
+    systemctl --user restart cc-wait-dashboard
+    @echo "Dashboard restarted. Check: curl -s http://localhost:18800/health"
