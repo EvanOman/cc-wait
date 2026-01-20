@@ -52,20 +52,20 @@ class TestDetectRateLimit:
 
     def test_ignores_code_snippets_with_keywords(self) -> None:
         # This is what caused false positives - code explaining the detection
-        content = '''
+        content = """
         indicators = ["usage limit", "limit reached", "limit will reset"]
         if not any(ind in content_lower for ind in indicators):
             return None
-        '''
+        """
         result = detect_rate_limit(content)
         assert result is None
 
     def test_ignores_test_strings_in_diffs(self) -> None:
         # Git diff output with test strings should not match
-        content = '''
+        content = """
         -        content = "Your limit will reset at 3:30pm (America/New_York)."
         +        content = "Your limit will reset at 3:30pm (America/New_York)."
-        '''
+        """
         result = detect_rate_limit(content)
         assert result is None
 
