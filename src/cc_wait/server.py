@@ -25,6 +25,7 @@ from fasthtml.common import (
     Span,
     Style,
     Title,
+    to_xml,
 )
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
@@ -438,7 +439,9 @@ async def dashboard():
             limited_panes = find_rate_limited_panes()
 
         html = render_dashboard(usage, panes, limited_panes)
-        return HTMLResponse(str(html))
+        # Html() returns (doctype, content) tuple - render properly
+        doctype, content = html
+        return HTMLResponse(str(doctype) + to_xml(content))
 
 
 @app.get("/api/usage")
