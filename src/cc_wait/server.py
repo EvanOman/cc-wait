@@ -1,10 +1,11 @@
-"""FastHTML dashboard server for cc-wait."""
+"""FastHTML dashboard server for cc-wait with integrated daemon."""
 
 from __future__ import annotations
 
 import argparse
 import os
 import sys
+import threading
 from datetime import datetime
 
 import uvicorn
@@ -27,12 +28,16 @@ from fasthtml.common import (
 )
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
+from cc_wait.daemon import RateLimitDaemon
 from cc_wait.oauth import UsageStatus, UsageWindow, fetch_usage_status
 from cc_wait.tmux import TmuxPane, find_rate_limited_panes, get_claude_panes
 from cc_wait.tracing import create_span, setup_tracing
 
 # Initialize tracing
 setup_tracing()
+
+# Global daemon instance for status access
+_daemon: RateLimitDaemon | None = None
 
 # Create FastAPI app
 app = FastAPI(
@@ -485,11 +490,46 @@ async def api_sessions():
 @app.get("/health")
 async def health():
     """Health check endpoint."""
-    return {"status": "healthy"}
+    global _daemon
+    return {
+        "status": "healthy",
+        "daemon_running": _daemon is not None,
+        "waiting_for_reset": _daemon.waiting_for_reset if _daemon else False,
+    }
+
+
+@app.get("/api/daemon")
+async def api_daemon():
+    """Get daemon status."""
+    global _daemon
+    if _daemon is None:
+        return {"error": "Daemon not running"}
+
+    return {
+        "running": True,
+        "waiting_for_reset": _daemon.waiting_for_reset,
+        "continued_panes": list(_daemon.continued_panes),
+        "poll_interval": _daemon.poll_interval,
+    }
+
+
+def _run_daemon_thread():
+    """Run the daemon in a background thread."""
+    global _daemon
+    _daemon = RateLimitDaemon()
+    _daemon.run()
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Start the daemon in a background thread on server startup."""
+    daemon_thread = threading.Thread(target=_run_daemon_thread, daemon=True)
+    daemon_thread.start()
+    print("Daemon monitoring thread started")
 
 
 def main():
-    """Run the dashboard server."""
+    """Run the dashboard server with integrated daemon."""
     parser = argparse.ArgumentParser(description="cc-wait dashboard server")
     parser.add_argument(
         "-p",
@@ -505,7 +545,7 @@ def main():
     )
     args = parser.parse_args()
 
-    print(f"Starting cc-wait dashboard on http://{args.host}:{args.port}")
+    print(f"Starting cc-wait dashboard + daemon on http://{args.host}:{args.port}")
     uvicorn.run(app, host=args.host, port=args.port)
 
 
