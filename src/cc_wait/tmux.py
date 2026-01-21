@@ -167,17 +167,53 @@ def find_rate_limited_panes() -> list[TmuxPane]:
 
 def send_continue(pane_id: str) -> bool:
     """
-    Send 'continue' command to a tmux pane.
+    Send continue command to a tmux pane.
+
+    When rate limited, Claude Code may show a numbered menu:
+      1. Wait until reset
+      2. Upgrade plan
+
+    We send "1" to select wait, then "continue" as the resume command.
+    If not blocked, these inputs are harmless (ignored or no-op).
 
     Returns True if successful, False otherwise.
     """
     try:
+        env = _get_tmux_env()
+
+        # First send "1" to select "wait" option if menu is showing
+        subprocess.run(
+            ["tmux", "send-keys", "-t", pane_id, "1", "Enter"],
+            capture_output=True,
+            timeout=5,
+            env=env,
+        )
+
+        # Small delay to let the UI process
+        import time
+
+        time.sleep(0.5)
+
+        # Then send "continue" to resume the session
         result = subprocess.run(
             ["tmux", "send-keys", "-t", pane_id, "continue", "Enter"],
             capture_output=True,
             timeout=5,
-            env=_get_tmux_env(),
+            env=env,
         )
         return result.returncode == 0
     except (subprocess.TimeoutExpired, FileNotFoundError):
         return False
+
+
+def is_pane_waiting_for_input(pane_id: str) -> bool:
+    """
+    Check if a pane appears to be waiting at a prompt.
+
+    Looks for indicators like "❯" prompt or "Baked/Cooked for" status.
+    This helps identify sessions that might be blocked vs actively working.
+    """
+    content = capture_pane_content(pane_id, lines=10)
+    # Claude Code shows these when waiting for input
+    waiting_indicators = ["❯", "Baked for", "Cooked for", "Sautéed for", "Crunched for"]
+    return any(ind in content for ind in waiting_indicators)

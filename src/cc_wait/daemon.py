@@ -111,11 +111,10 @@ class RateLimitDaemon:
                 self.continued_panes.clear()
 
     def _continue_all_sessions(self) -> None:
-        """Send 'continue' to ALL Claude panes.
+        """Send continue sequence to ALL Claude panes.
 
-        We don't try to detect which panes are blocked - just send continue to all.
-        This is more robust than regex-based terminal parsing.
-        Sending 'continue' to a non-blocked pane is harmless.
+        Sends '1' (to select 'wait' if rate limit menu showing) then 'continue'.
+        If pane isn't blocked, these inputs are harmless.
         """
         panes = get_claude_panes()
 
@@ -123,15 +122,17 @@ class RateLimitDaemon:
             log("No Claude sessions found")
             return
 
+        log(f"Sending continue sequence to {len(panes)} Claude session(s)...")
+
         for pane in panes:
             if pane.pane_id in self.continued_panes:
                 continue
 
             if send_continue(pane.pane_id):
-                log(f"Sent 'continue' to {pane.pane_id} ({pane.session_name})")
+                log(f"  → {pane.pane_id} ({pane.session_name}): sent '1' + 'continue'")
                 self.continued_panes.add(pane.pane_id)
             else:
-                log(f"Failed to send 'continue' to {pane.pane_id}")
+                log(f"  ✗ {pane.pane_id} ({pane.session_name}): failed to send")
 
 
 def run_daemon(poll_interval: int = POLL_INTERVAL) -> None:
