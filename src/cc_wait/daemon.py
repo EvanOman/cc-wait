@@ -8,7 +8,7 @@ import time
 from datetime import UTC, datetime
 
 from cc_wait.oauth import UsageStatus, fetch_usage_status
-from cc_wait.tmux import find_rate_limited_panes, is_tmux_available, send_continue
+from cc_wait.tmux import get_claude_panes, is_tmux_available, send_continue
 
 POLL_INTERVAL = int(os.environ.get("CC_WAIT_POLL_INTERVAL", "60"))
 DEBUG = os.environ.get("CC_WAIT_DEBUG", "").lower() in ("1", "true", "yes")
@@ -84,42 +84,47 @@ class RateLimitDaemon:
                 if reset:
                     reset_str = reset.strftime("%H:%M")
                     remaining = status.five_hour.resets_in_seconds or 0
-                    log(f"Rate limit detected. Reset at {reset_str} ({format_duration(remaining)})")
+                    log(
+                        f"Rate limit hit (100%). Reset at {reset_str} ({format_duration(remaining)})"
+                    )
                 else:
-                    log("Rate limit detected.")
+                    log("Rate limit hit (100%).")
 
-                # Find and log blocked sessions
-                limited_panes = find_rate_limited_panes()
-                if limited_panes:
-                    pane_ids = ", ".join(p.pane_id for p in limited_panes)
-                    log(f"Found {len(limited_panes)} blocked session(s): {pane_ids}")
+                # Log how many Claude sessions we'll continue when limit resets
+                panes = get_claude_panes()
+                if panes:
+                    log(f"Will send 'continue' to {len(panes)} Claude session(s) when limit resets")
                 else:
-                    log("No blocked sessions found in tmux (will check again at reset)")
+                    log("No Claude sessions found in tmux")
 
             # Check if we've passed the reset time
             reset = status.next_reset
             if reset and datetime.now(UTC) >= reset:
-                log("Reset time reached, but API still shows limited. Waiting...")
+                log("Reset time reached, but API still shows limited. Waiting...", debug_only=True)
 
         else:
             if self.waiting_for_reset:
-                # Rate limit just cleared
-                log("Rate limit reset!")
-                self._continue_blocked_sessions()
+                # Rate limit just cleared - continue ALL Claude sessions
+                log("Rate limit reset! Continuing all Claude sessions...")
+                self._continue_all_sessions()
                 self.waiting_for_reset = False
                 self.continued_panes.clear()
 
-    def _continue_blocked_sessions(self) -> None:
-        """Find and continue all blocked sessions."""
-        limited_panes = find_rate_limited_panes()
+    def _continue_all_sessions(self) -> None:
+        """Send 'continue' to ALL Claude panes.
 
-        if not limited_panes:
-            log("No blocked sessions to continue")
+        We don't try to detect which panes are blocked - just send continue to all.
+        This is more robust than regex-based terminal parsing.
+        Sending 'continue' to a non-blocked pane is harmless.
+        """
+        panes = get_claude_panes()
+
+        if not panes:
+            log("No Claude sessions found")
             return
 
-        for pane in limited_panes:
+        for pane in panes:
             if pane.pane_id in self.continued_panes:
-                log(f"Skipping {pane.pane_id} (already continued)", debug_only=True)
                 continue
 
             if send_continue(pane.pane_id):
