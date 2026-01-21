@@ -310,7 +310,7 @@ def get_status_class(utilization: float) -> str:
     return "ok"
 
 
-def render_usage_card(title: str, window: UsageWindow) -> Div:
+def render_usage_card(title: str, window: UsageWindow):
     """Render a usage card for a time window."""
     status_class = get_status_class(window.utilization)
     resets_in = format_duration(window.resets_in_seconds)
@@ -330,7 +330,7 @@ def render_usage_card(title: str, window: UsageWindow) -> Div:
     )
 
 
-def render_session_tile(pane: TmuxPane) -> Div:
+def render_session_tile(pane: TmuxPane):
     """Render a session tile."""
     status_class = "limited" if pane.is_rate_limited else "ok"
     status_text = "Rate Limited" if pane.is_rate_limited else "Active"
@@ -356,7 +356,7 @@ def render_dashboard(
     usage: UsageStatus | None,
     panes: list[TmuxPane],
     limited_panes: list[TmuxPane],
-) -> Html:
+):
     """Render the full dashboard."""
     now = datetime.now().strftime("%H:%M:%S")
 
