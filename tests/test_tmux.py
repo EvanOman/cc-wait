@@ -88,3 +88,45 @@ class TestDetectRateLimit:
         result = detect_rate_limit(content)
         assert result is not None
         assert result["reset_hour"] == 19
+
+    def test_detects_hit_your_limit_format(self) -> None:
+        # Alternative format: "You've hit your limit · resets 2am"
+        content = "You've hit your limit · resets 2am (America/Chicago)"
+        result = detect_rate_limit(content)
+        assert result is not None
+        assert result["reset_hour"] == 2
+        assert result["reset_minute"] == 0
+        assert result["timezone"] == "america/chicago"
+
+    def test_detects_hit_your_limit_with_minutes(self) -> None:
+        content = "You've hit your limit · resets 3:30pm (America/New_York)"
+        result = detect_rate_limit(content)
+        assert result is not None
+        assert result["reset_hour"] == 15
+        assert result["reset_minute"] == 30
+
+    def test_detects_hit_your_limit_with_dash(self) -> None:
+        # Sometimes uses dash instead of middle dot
+        content = "You've hit your limit - resets 7pm"
+        result = detect_rate_limit(content)
+        assert result is not None
+        assert result["reset_hour"] == 19
+
+    def test_detects_real_terminal_output(self) -> None:
+        # Real captured output from a rate-limited pane
+        content = """
+        ⎿  You've hit your limit · resets 2am (America/Chicago)
+
+❯ /rate-limit-options
+
+─────────────────────────────────────────────────────────────────────────────────
+ What do you want to do?
+
+ ❯ 1. Stop and wait for limit to reset
+   2. Upgrade your plan
+
+ Enter to confirm · escape to cancel
+"""
+        result = detect_rate_limit(content)
+        assert result is not None
+        assert result["reset_hour"] == 2

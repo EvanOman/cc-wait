@@ -100,21 +100,32 @@ def detect_rate_limit(content: str) -> dict | None:
     """
     Check if pane content shows a rate limit message.
 
-    Expected message format:
-    "Claude usage limit reached. Your limit will reset at 7pm (America/Chicago)."
+    Handles two message formats:
+    1. "Claude usage limit reached. Your limit will reset at 7pm (America/Chicago)."
+    2. "You've hit your limit · resets 2am (America/Chicago)"
 
     Returns dict with reset info if found, None otherwise.
     """
     content_lower = content.lower()
 
-    # Look for the specific Claude rate limit message
-    # Pattern: "Claude usage limit reached" followed by reset time
-    full_pattern = (
+    # Pattern 1: "Claude usage limit reached" format
+    pattern1 = (
         r"claude\s+usage\s+limit\s+reached.*?"
         r"limit\s+will\s+reset\s+at\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s*(?:\(([^)]+)\))?"
     )
 
-    match = re.search(full_pattern, content_lower, re.DOTALL)
+    # Pattern 2: "You've hit your limit · resets Xam/pm" format
+    pattern2 = (
+        r"you've\s+hit\s+your\s+limit\s*[·\-]\s*resets\s+"
+        r"(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s*(?:\(([^)]+)\))?"
+    )
+
+    match = None
+    for pattern in [pattern1, pattern2]:
+        match = re.search(pattern, content_lower, re.DOTALL)
+        if match:
+            break
+
     if not match:
         return None
 
@@ -125,7 +136,7 @@ def detect_rate_limit(content: str) -> dict | None:
     context = content_lower[start : match.end()]
 
     # Code/diff indicators: quotes, assignment, diff markers
-    code_indicators = ['content = "', 'content="', '= "claude', ">>> ", "... ", "\n+"]
+    code_indicators = ['content = "', 'content="', '= "claude', '= "you', ">>> ", "... ", "\n+"]
     if any(ind in context for ind in code_indicators):
         return None
 

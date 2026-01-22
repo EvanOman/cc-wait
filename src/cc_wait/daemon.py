@@ -191,27 +191,25 @@ class RateLimitDaemon:
                 # This avoids false positives from code/explanations earlier in history
                 last_lines = "\n".join(content_lines[-15:]).lower()
 
-                # Must have "claude" + "usage limit" together (not just generic text)
-                has_claude_usage_limit = "claude" in last_lines and "usage limit" in last_lines
-                has_limit_reset = "limit will reset" in last_lines
+                # Check for either message format:
+                # Format 1: "claude usage limit" + "limit will reset"
+                # Format 2: "you've hit your limit" + "resets"
+                has_format1 = "usage limit" in last_lines and "limit will reset" in last_lines
+                has_format2 = "hit your limit" in last_lines and "resets" in last_lines
                 # Check for the numbered menu that Claude shows
                 has_menu = "1." in last_lines and ("wait" in last_lines or "upgrade" in last_lines)
 
                 debug_log(f"[{pane.pane_id}] Detection results:")
                 debug_log(f"[{pane.pane_id}]   detect_rate_limit(): None")
                 debug_log(f"[{pane.pane_id}]   Checking last 15 lines only...")
-                debug_log(
-                    f"[{pane.pane_id}]   'claude' + 'usage limit' in last 15 lines: {has_claude_usage_limit}"
-                )
-                debug_log(
-                    f"[{pane.pane_id}]   'limit will reset' in last 15 lines: {has_limit_reset}"
-                )
+                debug_log(f"[{pane.pane_id}]   format1 (usage limit + will reset): {has_format1}")
+                debug_log(f"[{pane.pane_id}]   format2 (hit your limit + resets): {has_format2}")
                 debug_log(f"[{pane.pane_id}]   menu format (1. + wait/upgrade): {has_menu}")
 
-                # Require BOTH the Claude usage limit text AND the menu format
-                if has_claude_usage_limit and has_limit_reset and has_menu:
+                # Require rate limit text AND the menu format
+                if (has_format1 or has_format2) and has_menu:
                     debug_log(
-                        f"[{pane.pane_id}] FALLBACK DETECTED: has all indicators in recent lines"
+                        f"[{pane.pane_id}] FALLBACK DETECTED: has rate limit + menu in recent lines"
                     )
                     blocked_panes.append(pane)
                 else:
