@@ -187,21 +187,32 @@ class RateLimitDaemon:
                 debug_log(f"[{pane.pane_id}] DETECTED RATE LIMIT: {rate_info}")
                 blocked_panes.append(pane)
             else:
-                # Also check for simpler indicators that might be present
-                content_lower = content.lower()
-                has_usage_limit = "usage limit" in content_lower
-                has_limit_reset = "limit will reset" in content_lower
-                has_wait_option = "wait until" in content_lower or "1." in content
+                # Fallback: check ONLY the last 15 lines for rate limit indicators
+                # This avoids false positives from code/explanations earlier in history
+                last_lines = "\n".join(content_lines[-15:]).lower()
+
+                # Must have "claude" + "usage limit" together (not just generic text)
+                has_claude_usage_limit = "claude" in last_lines and "usage limit" in last_lines
+                has_limit_reset = "limit will reset" in last_lines
+                # Check for the numbered menu that Claude shows
+                has_menu = "1." in last_lines and ("wait" in last_lines or "upgrade" in last_lines)
 
                 debug_log(f"[{pane.pane_id}] Detection results:")
                 debug_log(f"[{pane.pane_id}]   detect_rate_limit(): None")
-                debug_log(f"[{pane.pane_id}]   'usage limit' present: {has_usage_limit}")
-                debug_log(f"[{pane.pane_id}]   'limit will reset' present: {has_limit_reset}")
-                debug_log(f"[{pane.pane_id}]   wait option indicator: {has_wait_option}")
+                debug_log(f"[{pane.pane_id}]   Checking last 15 lines only...")
+                debug_log(
+                    f"[{pane.pane_id}]   'claude' + 'usage limit' in last 15 lines: {has_claude_usage_limit}"
+                )
+                debug_log(
+                    f"[{pane.pane_id}]   'limit will reset' in last 15 lines: {has_limit_reset}"
+                )
+                debug_log(f"[{pane.pane_id}]   menu format (1. + wait/upgrade): {has_menu}")
 
-                # If we see strong indicators, consider it blocked even if regex didn't match
-                if has_usage_limit and has_limit_reset:
-                    debug_log(f"[{pane.pane_id}] FALLBACK DETECTED: has usage limit + reset text")
+                # Require BOTH the Claude usage limit text AND the menu format
+                if has_claude_usage_limit and has_limit_reset and has_menu:
+                    debug_log(
+                        f"[{pane.pane_id}] FALLBACK DETECTED: has all indicators in recent lines"
+                    )
                     blocked_panes.append(pane)
                 else:
                     debug_log(f"[{pane.pane_id}] NOT BLOCKED - skipping")
